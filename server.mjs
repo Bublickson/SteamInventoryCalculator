@@ -1,30 +1,29 @@
 import fsa from "fs/promises";
 import path from "path";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
-const steamIds = ["76561199510553377", "76561198262767750"];
+const steamIds = ["76561198077199743"];
+// Example Steam accounts
+
 const TotalAccountPrice = {
   steam: [],
   buff: [],
   cheapest: [],
 };
 
+puppeteer.use(StealthPlugin());
+
+const browser = await puppeteer.launch({ headless: true });
+
 async function fetchDataWithPuppeteer(url) {
-  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
 
-  // Установим User-Agent, как в браузере, чтобы выглядеть реалистично
-  await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
-  );
-
-  // Открываем URL и ждем загрузки сети
   const response = await page.goto(url, { waitUntil: "networkidle2" });
 
-  // Получаем тело ответа (если это JSON API)
   const data = await response.json();
 
-  await browser.close();
+  await page.close();
 
   return data;
 }
@@ -32,51 +31,6 @@ async function fetchDataWithPuppeteer(url) {
 async function fetchItemsCsgo(index) {
   const steamId = steamIds[index];
   const url = `https://api.pricempire.com/v3/inventory/public/items?query=${steamId}&provider=buff&appId=730`;
-
-  try {
-    const response = await fetchDataWithPuppeteer(url);
-    const items = response.items;
-    return items.map(
-      ({
-        marketHashName,
-        quality,
-        family,
-        prices = {},
-        type,
-        stickers,
-        inspectLink,
-      }) => {
-        const { buff, steam } = prices;
-
-        const pricesObj = {};
-        if (steam != null) pricesObj.steam = +(steam * 0.01).toFixed(2);
-        if (buff != null) pricesObj.buff = +(buff * 0.01).toFixed(2);
-
-        return {
-          steamId,
-          marketHashName,
-          type,
-          family,
-          quality,
-          prices: pricesObj,
-          stickers: stickers.map(({ price, wear, marketHashName }) => ({
-            price: +(price * 0.01).toFixed(2),
-            wear,
-            marketHashName,
-          })),
-          inspectLink,
-        };
-      }
-    );
-  } catch (error) {
-    console.error("Ошибка:", error.response?.status, error.message);
-    return [];
-  }
-}
-
-async function fetchItemsDota(index) {
-  const steamId = steamIds[index];
-  const url = `https://api.pricempire.com/v3/inventory/public/items?query=${steamId}&provider=buff&appId=570`;
 
   try {
     const response = await fetchDataWithPuppeteer(url);
@@ -115,6 +69,34 @@ async function fetchItemsDota(index) {
         };
       }
     );
+  } catch (error) {
+    console.error("Ошибка:", error.response?.status, error.message);
+    return [];
+  }
+}
+
+async function fetchItemsDota(index) {
+  const steamId = steamIds[index];
+  const url = `https://api.pricempire.com/v3/inventory/public/items?query=${steamId}&provider=buff&appId=570`;
+
+  try {
+    const response = await fetchDataWithPuppeteer(url);
+    const items = response.items;
+    return items.map(({ marketHashName, itemType, prices = {} }) => {
+      const { cheapest, buff, steam } = prices;
+
+      const pricesObj = {};
+      if (steam != null) pricesObj.steam = +(steam * 0.01).toFixed(2);
+      if (buff != null) pricesObj.buff = +(buff * 0.01).toFixed(2);
+      if (cheapest != null) pricesObj.cheapest = +(cheapest * 0.01).toFixed(2);
+
+      return {
+        steamId,
+        marketHashName,
+        type: itemType,
+        prices: pricesObj,
+      };
+    });
   } catch (error) {
     console.error("Ошибка:", error.response?.status, error.message);
     return [];
@@ -210,7 +192,8 @@ async function dota() {
   }
 }
 
-await csgo();
 await dota();
 
 await makeSum(TotalAccountPrice);
+
+await browser.close();

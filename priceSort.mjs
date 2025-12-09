@@ -21,8 +21,8 @@ async function priceSort(baseDir, sortValue) {
         if (Array.isArray(data)) {
           data.sort(
             (a, b) =>
-              (b.prices?.[sortValue] ?? b.prices.cheapest) -
-              (a.prices?.[sortValue] ?? a.prices.cheapest)
+              (b.prices?.[sortValue] ?? b.prices.cheapest ?? 0) -
+              (a.prices?.[sortValue] ?? a.prices.cheapest ?? 0)
           );
         }
 
