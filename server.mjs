@@ -2,15 +2,13 @@ import fsa from "fs/promises";
 import path from "path";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import { priceSort } from "./priceSort.mjs";
+import { priceSum } from "./sumTest.mjs";
 
 const steamIds = ["76561198077199743"];
 // Example Steam accounts
 
-const TotalAccountPrice = {
-  steam: [],
-  buff: [],
-  cheapest: [],
-};
+const folderPath = "accounts";
 
 puppeteer.use(StealthPlugin());
 
@@ -70,7 +68,7 @@ async function fetchItemsCsgo(index) {
       }
     );
   } catch (error) {
-    console.error("Ошибка:", error.response?.status, error.message);
+    console.error("Error:", error);
     return [];
   }
 }
@@ -83,11 +81,11 @@ async function fetchItemsDota(index) {
     const response = await fetchDataWithPuppeteer(url);
     const items = response.items;
     return items.map(({ marketHashName, itemType, prices = {} }) => {
-      const { cheapest, buff, steam } = prices;
+      const { cheapest, dmarket, skinport } = prices;
 
       const pricesObj = {};
-      if (steam != null) pricesObj.steam = +(steam * 0.01).toFixed(2);
-      if (buff != null) pricesObj.buff = +(buff * 0.01).toFixed(2);
+      if (skinport != null) pricesObj.skinport = +(skinport * 0.01).toFixed(2);
+      if (dmarket != null) pricesObj.dmarket = +(dmarket * 0.01).toFixed(2);
       if (cheapest != null) pricesObj.cheapest = +(cheapest * 0.01).toFixed(2);
 
       return {
@@ -98,7 +96,7 @@ async function fetchItemsDota(index) {
       };
     });
   } catch (error) {
-    console.error("Ошибка:", error.response?.status, error.message);
+    console.error("Error:", error);
     return [];
   }
 }
@@ -108,11 +106,11 @@ async function saveData(accountsData, baseDir) {
     const type = item.type ?? "UnknownType"; // Pistol
     const family = item.family ?? null; // Glock-18
 
-    let dirPath; // Путь папки
-    let filePath; // Путь файла
+    let dirPath;
+    let filePath;
 
     if (family) {
-      // Не у всех придметов есть значение family, у кейсов это есть только type = Container
+      //Not all items have a family value. E.g for csgo-cases, exists only type (Container).
       dirPath = path.join(baseDir, type);
       filePath = path.join(dirPath, family + ".json");
       await fsa.mkdir(dirPath, { recursive: true });
@@ -120,64 +118,25 @@ async function saveData(accountsData, baseDir) {
       filePath = path.join(baseDir, type + ".json");
     }
 
-    // Проверка: если файл уже есть — читаем и добавляем в массив
     let existingData = [];
     try {
       const content = await fsa.readFile(filePath, "utf-8");
       existingData = JSON.parse(content);
-    } catch (err) {
-      // файл не найден — игнорируем
-    }
+    } catch (err) {}
 
-    // Добавляем новый элемент
     existingData.push(item);
-    TotalAccountPrice.steam.push(item.prices.steam);
-    TotalAccountPrice.buff.push(item.prices.buff);
-    TotalAccountPrice.cheapest.push(item.prices.cheapest ?? 0);
 
-    // Сохраняем
     await fsa.writeFile(
       filePath,
       JSON.stringify(existingData, null, 2),
       "utf-8"
     );
-    console.log(`Файл сохранён: ${filePath}`);
+    console.log(`Saved: ${filePath}`);
   }
 }
 
-async function makeSum(priceObj) {
-  const filePath = path.join("accounts", "TotalAccountPrice.json");
-
-  const sumSteam = priceObj.steam
-    .map((n, i) => {
-      if (typeof n !== "number" || n == null) {
-        // Подставляем соответствующее значение из cheapest по индексу
-        return priceObj.cheapest[i] ?? 0;
-      }
-      return n;
-    })
-    .reduce((a, b) => a + b, 0);
-
-  const sumBuff = priceObj.buff
-    .map((n, i) => {
-      if (typeof n !== "number" || n == null) {
-        return priceObj.cheapest[i] ?? 0;
-      }
-      return n;
-    })
-    .reduce((a, b) => a + b, 0);
-
-  const result = {
-    Steam: +sumSteam.toFixed(2),
-    Buff: +sumBuff.toFixed(2),
-  };
-
-  await fsa.writeFile(filePath, JSON.stringify(result, null, 2), "utf-8");
-  console.log(`Файл суммы сохранён: ${filePath}`);
-}
-
 async function csgo() {
-  const baseDir = path.join("accounts", "csgo");
+  const baseDir = path.join(folderPath, "csgo");
   await fsa.mkdir(baseDir, { recursive: true });
   for (let i = 0; i < steamIds.length; i++) {
     await saveData(await fetchItemsCsgo(i), baseDir);
@@ -185,15 +144,29 @@ async function csgo() {
 }
 
 async function dota() {
-  const baseDir = path.join("accounts", "dota");
+  const baseDir = path.join(folderPath, "dota");
   await fsa.mkdir(baseDir, { recursive: true });
   for (let i = 0; i < steamIds.length; i++) {
     await saveData(await fetchItemsDota(i), baseDir);
   }
 }
 
-await dota();
+async function main() {
+  try {
+    // Select the games from which you want to get inventory data.
+    await csgo();
+    await dota();
 
-await makeSum(TotalAccountPrice);
+    // steam (csgo) and skinport (dota) are the parameters by which your items will be sorted.
+    // Other parameters buff (csgo), dmarket (dota).
+    await priceSort(folderPath, "steam", "skinport");
 
-await browser.close();
+    await priceSum(folderPath);
+  } catch (err) {
+    console.error("Critical error:", err);
+  } finally {
+    await browser.close();
+  }
+}
+
+await main();
