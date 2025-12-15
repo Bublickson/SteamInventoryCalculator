@@ -14,22 +14,25 @@ export async function priceSort(baseDir, sortValueCSGO, sortValueDota) {
         const content = await fsa.readFile(basePath, "utf-8");
         let data = JSON.parse(content);
 
-        if (Array.isArray(data)) {
+        if (!Array.isArray(data)) {
+          data = [data];
+        }
+
+        if (data) {
           data.sort(
             (a, b) =>
               (b.prices?.[sortValueCSGO] ??
                 b.prices?.[sortValueDota] ??
-                b.prices.cheapest ??
+                b.prices?.cheapest ??
                 0) -
               (a.prices?.[sortValueCSGO] ??
                 a.prices?.[sortValueDota] ??
-                a.prices.cheapest ??
+                a.prices?.cheapest ??
                 0)
           );
         }
 
         await fsa.writeFile(basePath, JSON.stringify(data, null, 2), "utf-8");
-        console.log(`Sorted: ${basePath}`);
       } catch (err) {
         console.error(`Error while sorting  ${basePath}:`, err.message);
       }

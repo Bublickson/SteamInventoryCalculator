@@ -1,4 +1,4 @@
-import fs from "fs";
+import fsa from "fs/promises";
 import path from "path";
 
 async function sumPrices(folderPath) {
@@ -9,21 +9,19 @@ async function sumPrices(folderPath) {
     dmarket: 0,
   };
 
-  const files = fs.readdirSync(folderPath);
+  const entries = await fsa.readdir(folderPath, { withFileTypes: true });
 
-  for (const file of files) {
-    const fullPath = path.join(folderPath, file);
-    const stat = fs.statSync(fullPath);
+  for (const entry of entries) {
+    const fullPath = path.join(folderPath, entry.name);
 
-    if (stat.isDirectory()) {
+    if (entry.isDirectory()) {
       const subTotals = await sumPrices(fullPath);
       total.steam += subTotals.steam;
       total.buff += subTotals.buff;
       total.skinport += subTotals.skinport;
       total.dmarket += subTotals.dmarket;
-    } else if (file.endsWith(".json")) {
-      const data = JSON.parse(fs.readFileSync(fullPath, "utf-8"));
-
+    } else if (entry.isFile() && entry.name.endsWith(".json")) {
+      const data = JSON.parse(await fsa.readFile(fullPath, "utf-8"));
       const items = Array.isArray(data) ? data : [data];
 
       for (const item of items) {
@@ -48,6 +46,7 @@ export async function priceSum(folder) {
     Steam: +totalSum.steam.toFixed(2),
     Buff: +totalSum.buff.toFixed(2),
   };
+
   const resultDota = {
     Skinport: +totalSum.skinport.toFixed(2),
     DMarket: +totalSum.dmarket.toFixed(2),
@@ -55,10 +54,11 @@ export async function priceSum(folder) {
 
   const filePath = path.join(folder, "TotalAccountPrice.json");
 
-  fs.writeFileSync(
+  await fsa.writeFile(
     filePath,
     JSON.stringify(["CSGO:", resultCSGO, "Dota:", resultDota], null, 2),
     "utf-8"
   );
+
   console.log(`Sum file saved: ${filePath}`);
 }
