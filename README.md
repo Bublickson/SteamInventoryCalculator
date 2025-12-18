@@ -7,7 +7,9 @@ The project is designed for analysis and aggregation of a **large number of Stea
 ---
 
 ## 📦 Installation
-
+```
+git clone https://github.com/Bublickson/SteamInventoryCalculator
+```
 ```
 npm install
 ```
